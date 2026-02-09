@@ -1,0 +1,191 @@
+-- [[ REDZ HUB V3 - ANTI VIP EDITION ]] --
+local Player = game.Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+
+-- Variáveis de Estado
+local SpeedEnabled, JumpEnabled, InfJumpEnabled = false, false, false
+local FlyEnabled, StreamerMode = false, false
+local FlySpeed = 50
+local RemovedParts = {}
+
+-- [[ INTERFACE ]] --
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "RedzHub_V3_Final"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+local RedzRed = Color3.fromRGB(255, 0, 0)
+local SuccessGreen = Color3.fromRGB(0, 200, 0)
+local Background = Color3.fromRGB(15, 15, 15)
+local SidebarCol = Color3.fromRGB(25, 25, 25)
+local Darker = Color3.fromRGB(35, 35, 35)
+
+-- Função Arrastar
+local function MakeDraggable(gui)
+    local dragging, dragInput, dragStart, startPos
+    gui.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true; dragStart = input.Position; startPos = gui.Position
+        end
+    end)
+    gui.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    gui.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+end
+
+-- Frame Principal
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 480, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -240, 0.5, -175)
+MainFrame.BackgroundColor3 = Background
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame)
+MakeDraggable(MainFrame)
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 120, 1, 0); Sidebar.BackgroundColor3 = SidebarCol; Sidebar.Parent = MainFrame
+Instance.new("UICorner", Sidebar)
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -130, 1, -10); Content.Position = UDim2.new(0, 125, 0, 5)
+Content.BackgroundTransparency = 1; Content.Parent = MainFrame
+
+-- Criador de Abas
+local function CreateTab(name, visible)
+    local TabFrame = Instance.new("ScrollingFrame")
+    TabFrame.Size = UDim2.new(1, 0, 1, 0); TabFrame.BackgroundTransparency = 1
+    TabFrame.Visible = visible; TabFrame.ScrollBarThickness = 0; TabFrame.Parent = Content
+    
+    local TabButton = Instance.new("TextButton")
+    TabButton.Size = UDim2.new(0.9, 0, 0, 30)
+    TabButton.Position = UDim2.new(0.05, 0, 0, (#Sidebar:GetChildren() - 1) * 35 + 10)
+    TabButton.BackgroundColor3 = visible and RedzRed or Darker
+    TabButton.Text = name; TabButton.TextColor3 = Color3.new(1, 1, 1); TabButton.Font = Enum.Font.GothamBold; TabButton.Parent = Sidebar
+    Instance.new("UICorner", TabButton)
+    
+    TabButton.MouseButton1Click:Connect(function()
+        for _, v in pairs(Content:GetChildren()) do v.Visible = false end
+        for _, v in pairs(Sidebar:GetChildren()) do if v:IsA("TextButton") then v.BackgroundColor3 = Darker end end
+        TabFrame.Visible = true; TabButton.BackgroundColor3 = RedzRed
+    end)
+    Instance.new("UIListLayout", TabFrame).Padding = UDim.new(0, 8)
+    return TabFrame
+end
+
+local function CreateToggleButton(name, parent, callback)
+    local state = false
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 320, 0, 35); btn.BackgroundColor3 = Darker
+    btn.Text = name .. ": OFF"; btn.TextColor3 = Color3.new(1, 1, 1); btn.Font = Enum.Font.GothamBold; btn.Parent = parent
+    Instance.new("UICorner", btn)
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = name .. (state and ": ON" or ": OFF")
+        btn.BackgroundColor3 = state and SuccessGreen or Darker
+        callback(state)
+    end)
+    return btn
+end
+
+-- [[ ABAS ]] --
+local TabPlayer = CreateTab("Player", true)
+local TabBypass = CreateTab("Bypass", false)
+local TabConfig = CreateTab("Config", false)
+
+--- [ PLAYER ] ---
+CreateToggleButton("Speed Boost", TabPlayer, function(s) SpeedEnabled = s end)
+CreateToggleButton("Jump Boost", TabPlayer, function(s) JumpEnabled = s end)
+CreateToggleButton("Infinite Jump", TabPlayer, function(s) InfJumpEnabled = s end)
+
+--- [ BYPASS (ANTI VIP) ] ---
+local VipCoords = {
+    Vector3.new(242, 10, -135.7), Vector3.new(242, 10, 135.6),
+    Vector3.new(341, 10, 135.6), Vector3.new(341, 10, -135.4),
+    Vector3.new(470, 10, -135.4), Vector3.new(649, 10, 135.4),
+    Vector3.new(649, 10, -135.4), Vector3.new(913, 10, 135.5),
+    Vector3.new(913, 10, -135.4), Vector3.new(1310, 10, 135.5),
+    Vector3.new(1310, 10, -135.4), Vector3.new(1900, 10, 135.6),
+    Vector3.new(1900, 10, -135.4), Vector3.new(2430.5, 10, -135.6),
+    Vector3.new(2430.5, 10, 135.6)
+}
+
+local BtnAntiVip = Instance.new("TextButton")
+BtnAntiVip.Size = UDim2.new(0, 320, 0, 40)
+BtnAntiVip.BackgroundColor3 = Color3.fromRGB(200, 0, 200)
+BtnAntiVip.Text = "ATIVAR ANTI VIP"
+BtnAntiVip.TextColor3 = Color3.new(1, 1, 1)
+BtnAntiVip.Parent = TabBypass
+Instance.new("UICorner", BtnAntiVip)
+
+BtnAntiVip.MouseButton1Click:Connect(function()
+    local count = 0
+    for _, targetPos in pairs(VipCoords) do
+        for _, obj in pairs(game.Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and (obj.Position - targetPos).Magnitude <= 7 then
+                obj.Transparency = 0.5 -- Fica semi-transparente para saber que funcionou
+                obj.CanCollide = false
+                count = count + 1
+            end
+        end
+    end
+    BtnAntiVip.Text = "ANTI VIP ATIVADO ("..count..")"
+    BtnAntiVip.BackgroundColor3 = SuccessGreen
+end)
+
+--- [ CONFIG ] ---
+local UnloadBtn = Instance.new("TextButton")
+UnloadBtn.Size = UDim2.new(0, 320, 0, 40); UnloadBtn.BackgroundColor3 = RedzRed; UnloadBtn.Text = "UNLOAD HUB"; UnloadBtn.Parent = TabConfig
+Instance.new("UICorner", UnloadBtn)
+UnloadBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+-- Fly Mobile
+local FlyBtn = Instance.new("TextButton")
+FlyBtn.Size = UDim2.new(0, 50, 0, 50); FlyBtn.Position = UDim2.new(0, 20, 0.8, 0)
+FlyBtn.BackgroundColor3 = Color3.new(0,0,0); FlyBtn.Text = "FLY"; FlyBtn.TextColor3 = Color3.new(1,1,1); FlyBtn.Parent = ScreenGui
+Instance.new("UICorner", FlyBtn).CornerRadius = UDim.new(1,0)
+MakeDraggable(FlyBtn)
+
+FlyBtn.MouseButton1Click:Connect(function()
+    FlyEnabled = not FlyEnabled
+    FlyBtn.BackgroundColor3 = FlyEnabled and SuccessGreen or Color3.new(0,0,0)
+    if FlyEnabled then
+        local bv = Instance.new("BodyVelocity", Player.Character.HumanoidRootPart)
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge); bv.Name = "RedzFly"
+        task.spawn(function()
+            while FlyEnabled do
+                bv.Velocity = workspace.CurrentCamera.CFrame.LookVector * FlySpeed
+                task.wait()
+            end
+            bv:Destroy()
+        end)
+    end
+end)
+
+-- Loops
+RunService.RenderStepped:Connect(function()
+    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
+        if SpeedEnabled then Player.Character.Humanoid.WalkSpeed = 60 end
+        if JumpEnabled then Player.Character.Humanoid.JumpPower = 100 end
+    end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if InfJumpEnabled then Player.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping") end
+end)
+
+local MainToggle = Instance.new("TextButton")
+MainToggle.Size = UDim2.new(0, 45, 0, 45); MainToggle.Position = UDim2.new(0, 20, 0.5, 0); MainToggle.Text = "R"; MainToggle.Parent = ScreenGui
+Instance.new("UICorner", MainToggle).CornerRadius = UDim.new(1,0)
+MainToggle.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+# Teste
